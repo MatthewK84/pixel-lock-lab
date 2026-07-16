@@ -12,7 +12,7 @@ maintained template. This keeps the lock policy comparable across backends.
 from __future__ import annotations
 
 import logging
-from typing import Any, Final
+from typing import TYPE_CHECKING, Any, Final
 
 import cv2
 import numpy as np
@@ -23,6 +23,9 @@ from pixel_lock_lab.geometry import BoundingBox
 from pixel_lock_lab.imageutil import crop, to_gray
 from pixel_lock_lab.trackers.base import BaseTracker, Measurement
 
+if TYPE_CHECKING:
+    from pixel_lock_lab.array_types import Array
+
 logger: logging.Logger = logging.getLogger(__name__)
 
 MIN_TEMPLATE_PX: Final[int] = 4
@@ -31,11 +34,11 @@ OPENCV_BACKENDS: Final[frozenset[TrackerBackend]] = frozenset(
 )
 
 
-def _ncc(patch: np.ndarray, template: np.ndarray) -> float:
+def _ncc(patch: Array, template: Array) -> float:
     """Single normalized cross-correlation value, clamped to [0, 1]."""
     if patch.shape != template.shape:
         patch = cv2.resize(patch, (template.shape[1], template.shape[0]))
-    result: np.ndarray = cv2.matchTemplate(patch, template, cv2.TM_CCOEFF_NORMED)
+    result: Array = cv2.matchTemplate(patch, template, cv2.TM_CCOEFF_NORMED)
     return float(np.clip(result.max(), 0.0, 1.0))
 
 
@@ -44,33 +47,33 @@ class TemplateMatchTracker(BaseTracker):
 
     def __init__(self, config: TrackerConfig) -> None:
         super().__init__(config)
-        self._template: np.ndarray | None = None
+        self._template: Array | None = None
 
-    def _initialize(self, frame: np.ndarray, bbox: BoundingBox) -> None:
-        patch: np.ndarray | None = crop(to_gray(frame), bbox)
+    def _initialize(self, frame: Array, bbox: BoundingBox) -> None:
+        patch: Array | None = crop(to_gray(frame), bbox)
         if patch is None or patch.shape[0] < MIN_TEMPLATE_PX or patch.shape[1] < MIN_TEMPLATE_PX:
             raise TrackerError(f"cannot build template from bbox {bbox}")
         self._template = patch.astype(np.float32)
 
-    def _measure(self, frame: np.ndarray, search_box: BoundingBox) -> Measurement:
+    def _measure(self, frame: Array, search_box: BoundingBox) -> Measurement:
         if self._template is None:
             return Measurement(None, 0.0)
-        region: np.ndarray | None = crop(to_gray(frame), search_box)
+        region: Array | None = crop(to_gray(frame), search_box)
         if region is None:
             return Measurement(None, 0.0)
-        template_u8: np.ndarray = self._template.astype(np.uint8)
+        template_u8: Array = self._template.astype(np.uint8)
         if region.shape[0] < template_u8.shape[0] or region.shape[1] < template_u8.shape[1]:
             return Measurement(None, 0.0)
         return self._locate(region, template_u8, search_box, frame)
 
     def _locate(
         self,
-        region: np.ndarray,
-        template: np.ndarray,
+        region: Array,
+        template: Array,
         search_box: BoundingBox,
-        frame: np.ndarray,
+        frame: Array,
     ) -> Measurement:
-        result: np.ndarray = cv2.matchTemplate(region, template, cv2.TM_CCOEFF_NORMED)
+        result: Array = cv2.matchTemplate(region, template, cv2.TM_CCOEFF_NORMED)
         _, max_val, _, max_loc = cv2.minMaxLoc(result)
         score: float = float(np.clip(max_val, 0.0, 1.0))
         found: BoundingBox = BoundingBox(
@@ -83,12 +86,12 @@ class TemplateMatchTracker(BaseTracker):
             self._blend_template(frame, found)
         return Measurement(found, score)
 
-    def _blend_template(self, frame: np.ndarray, box: BoundingBox) -> None:
+    def _blend_template(self, frame: Array, box: BoundingBox) -> None:
         """Exponentially blend the observed patch into the template."""
         rate: float = self._config.template_update_rate
         if rate <= 0.0 or self._template is None:
             return
-        patch: np.ndarray | None = crop(to_gray(frame), box)
+        patch: Array | None = crop(to_gray(frame), box)
         if patch is None or patch.shape != self._template.shape:
             return
         self._template = (1.0 - rate) * self._template + rate * patch.astype(np.float32)
@@ -128,20 +131,20 @@ class OpenCVTracker(BaseTracker):
         if config.backend not in OPENCV_BACKENDS:
             raise TrackerError(f"{config.backend.value} is not an OpenCV backend")
         self._impl: Any = None
-        self._template: np.ndarray | None = None
+        self._template: Array | None = None
 
-    def _initialize(self, frame: np.ndarray, bbox: BoundingBox) -> None:
+    def _initialize(self, frame: Array, bbox: BoundingBox) -> None:
         self._impl = _create_opencv_tracker(self._config.backend)
         try:
             self._impl.init(frame, bbox.as_int_tuple())
         except cv2.error as exc:
             raise TrackerError(f"OpenCV tracker init failed: {exc}") from exc
-        patch: np.ndarray | None = crop(to_gray(frame), bbox)
+        patch: Array | None = crop(to_gray(frame), bbox)
         if patch is None:
             raise TrackerError(f"cannot build template from bbox {bbox}")
         self._template = patch.astype(np.float32)
 
-    def _measure(self, frame: np.ndarray, _search_box: BoundingBox) -> Measurement:
+    def _measure(self, frame: Array, _search_box: BoundingBox) -> Measurement:
         if self._impl is None:
             return Measurement(None, 0.0)
         try:
@@ -154,10 +157,10 @@ class OpenCVTracker(BaseTracker):
         box: BoundingBox = BoundingBox(float(raw[0]), float(raw[1]), float(raw[2]), float(raw[3]))
         return Measurement(box, self._score_box(frame, box))
 
-    def _score_box(self, frame: np.ndarray, box: BoundingBox) -> float:
+    def _score_box(self, frame: Array, box: BoundingBox) -> float:
         if self._template is None:
             return 0.0
-        patch: np.ndarray | None = crop(to_gray(frame), box)
+        patch: Array | None = crop(to_gray(frame), box)
         if patch is None or patch.size == 0:
             return 0.0
         score: float = _ncc(patch, self._template.astype(np.uint8))
@@ -165,7 +168,7 @@ class OpenCVTracker(BaseTracker):
             self._blend_template(patch)
         return score
 
-    def _blend_template(self, patch: np.ndarray) -> None:
+    def _blend_template(self, patch: Array) -> None:
         rate: float = self._config.template_update_rate
         if rate <= 0.0 or self._template is None:
             return

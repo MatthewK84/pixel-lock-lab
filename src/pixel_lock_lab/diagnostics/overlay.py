@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from pathlib import Path
     from types import TracebackType
 
+    from pixel_lock_lab.array_types import Array
     from pixel_lock_lab.geometry import BoundingBox
     from pixel_lock_lab.trackers.base import TrackState
 
@@ -38,18 +39,18 @@ FONT_SCALE: Final[float] = 0.5
 
 
 def draw_box(
-    frame: np.ndarray, box: BoundingBox, color: tuple[int, int, int], thickness: int = 2
-) -> np.ndarray:
+    frame: Array, box: BoundingBox, color: tuple[int, int, int], thickness: int = 2
+) -> Array:
     """Draw a rectangle for `box` on a copy of `frame`."""
-    out: np.ndarray = frame.copy()
+    out: Array = frame.copy()
     x, y, w, h = box.as_int_tuple()
     cv2.rectangle(out, (x, y), (x + w, y + h), color, thickness)
     return out
 
 
-def draw_status(frame: np.ndarray, state: TrackState) -> np.ndarray:
+def draw_status(frame: Array, state: TrackState) -> Array:
     """Write frame index, status, score, and latency into the top-left corner."""
-    out: np.ndarray = frame.copy()
+    out: Array = frame.copy()
     color: tuple[int, int, int] = STATUS_COLORS[state.status]
     lines: list[str] = [
         f"frame {state.frame_index}  {state.status.value.upper()}",
@@ -61,9 +62,9 @@ def draw_status(frame: np.ndarray, state: TrackState) -> np.ndarray:
     return out
 
 
-def annotate(frame: np.ndarray, state: TrackState) -> np.ndarray:
+def annotate(frame: Array, state: TrackState) -> Array:
     """Draw predicted box, measured box, and the status block."""
-    out: np.ndarray = to_bgr(frame)
+    out: Array = to_bgr(frame)
     if state.predicted_bbox is not None:
         out = draw_box(out, state.predicted_bbox, PREDICTED_COLOR, thickness=1)
     if state.bbox is not None:
@@ -71,7 +72,7 @@ def annotate(frame: np.ndarray, state: TrackState) -> np.ndarray:
     return draw_status(out, state)
 
 
-def _plot_threshold(canvas: np.ndarray, value: float, color: tuple[int, int, int]) -> None:
+def _plot_threshold(canvas: Array, value: float, color: tuple[int, int, int]) -> None:
     height: int = canvas.shape[0]
     y: int = int(height - value * height)
     cv2.line(canvas, (0, y), (canvas.shape[1], y), color, 1, cv2.LINE_AA)
@@ -79,16 +80,16 @@ def _plot_threshold(canvas: np.ndarray, value: float, color: tuple[int, int, int
 
 def render_score_plot(
     scores: Sequence[float], width: int, height: int, tracker: TrackerConfig
-) -> np.ndarray:
+) -> Array:
     """Render a rolling score trace with threshold lines."""
-    canvas: np.ndarray = np.full((height, width, 3), PLOT_BG, dtype=np.uint8)
+    canvas: Array = np.full((height, width, 3), PLOT_BG, dtype=np.uint8)
     _plot_threshold(canvas, tracker.lock_threshold, (0, 140, 255))
     _plot_threshold(canvas, tracker.reacquire_threshold, (0, 220, 0))
     if len(scores) < 2:
         return canvas
     window: Sequence[float] = scores[-width:]
     step: float = width / float(max(len(window) - 1, 1))
-    points: np.ndarray = np.array(
+    points: Array = np.array(
         [
             [int(i * step), int(height - np.clip(s, 0.0, 1.0) * height)]
             for i, s in enumerate(window)
@@ -100,7 +101,7 @@ def render_score_plot(
     return canvas
 
 
-def compose(frame: np.ndarray, plot: np.ndarray) -> np.ndarray:
+def compose(frame: Array, plot: Array) -> Array:
     """Stack an annotated frame above its score plot."""
     if frame.shape[1] != plot.shape[1]:
         plot = cv2.resize(plot, (frame.shape[1], plot.shape[0]))
@@ -117,14 +118,14 @@ class OverlayWriter:
         self._writer: cv2.VideoWriter | None = None
         self._scores: list[float] = []
 
-    def write(self, frame: np.ndarray, state: TrackState) -> np.ndarray:
+    def write(self, frame: Array, state: TrackState) -> Array:
         """Annotate one frame, append it to the video, and return the composite."""
         self._scores.append(state.score)
-        annotated: np.ndarray = annotate(frame, state)
-        plot: np.ndarray = render_score_plot(
+        annotated: Array = annotate(frame, state)
+        plot: Array = render_score_plot(
             self._scores, annotated.shape[1], self._config.plot_height_px, self._tracker
         )
-        composite: np.ndarray = compose(annotated, plot)
+        composite: Array = compose(annotated, plot)
         self._ensure_writer(composite.shape[1], composite.shape[0])
         if self._writer is not None:
             self._writer.write(composite)

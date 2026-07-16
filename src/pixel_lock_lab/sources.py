@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     from pathlib import Path
 
+    from pixel_lock_lab.array_types import Array
     from pixel_lock_lab.config.schemas import SourceConfig
 
 IMAGE_SUFFIXES: Final[frozenset[str]] = frozenset(
@@ -34,7 +35,7 @@ class FrameSource(ABC):
     """Yields frames and optionally knows ground truth."""
 
     @abstractmethod
-    def frames(self) -> Iterator[np.ndarray]:
+    def frames(self) -> Iterator[Array]:
         """Yield frames in order."""
 
     def ground_truth(self, _frame_index: int) -> BoundingBox | None:
@@ -42,12 +43,12 @@ class FrameSource(ABC):
         return None
 
 
-def _make_background(width: int, height: int) -> np.ndarray:
+def _make_background(width: int, height: int) -> Array:
     """Textured static background that gives optical flow something to hold."""
     rng: np.random.Generator = np.random.default_rng(BACKGROUND_SEED)
-    noise: np.ndarray = rng.integers(60, 120, size=(height, width), dtype=np.uint8)
-    blurred: np.ndarray = cv2.GaussianBlur(noise, (0, 0), sigmaX=3.0)
-    canvas: np.ndarray = cv2.cvtColor(blurred, cv2.COLOR_GRAY2BGR)
+    noise: Array = rng.integers(60, 120, size=(height, width), dtype=np.uint8)
+    blurred: Array = cv2.GaussianBlur(noise, (0, 0), sigmaX=3.0)
+    canvas: Array = cv2.cvtColor(blurred, cv2.COLOR_GRAY2BGR)
     for i in range(0, width, 64):
         cv2.line(canvas, (i, 0), (i, height), (90, 95, 100), 1)
     for j in range(0, height, 64):
@@ -60,7 +61,7 @@ class SyntheticSource(FrameSource):
 
     def __init__(self, config: SourceConfig) -> None:
         self._config: SourceConfig = config
-        self._background: np.ndarray = _make_background(config.frame_width, config.frame_height)
+        self._background: Array = _make_background(config.frame_width, config.frame_height)
 
     def ground_truth(self, frame_index: int) -> BoundingBox | None:
         """Exact target box for `frame_index`."""
@@ -73,8 +74,8 @@ class SyntheticSource(FrameSource):
         half: float = TARGET_SIZE_PX / 2.0
         return BoundingBox(cx - half, cy - half, float(TARGET_SIZE_PX), float(TARGET_SIZE_PX))
 
-    def _render(self, frame_index: int) -> np.ndarray:
-        frame: np.ndarray = self._background.copy()
+    def _render(self, frame_index: int) -> Array:
+        frame: Array = self._background.copy()
         box: BoundingBox | None = self.ground_truth(frame_index)
         if box is None:
             return frame
@@ -83,7 +84,7 @@ class SyntheticSource(FrameSource):
         cv2.circle(frame, (int(cx), int(cy)), TARGET_SIZE_PX // 4, (40, 40, 60), thickness=-1)
         return frame
 
-    def frames(self) -> Iterator[np.ndarray]:
+    def frames(self) -> Iterator[Array]:
         """Yield the configured number of synthetic frames."""
         for index in range(self._config.synthetic_frames):
             yield self._render(index)
@@ -100,7 +101,7 @@ class VideoSource(FrameSource):
         self._config: SourceConfig = config
         self._path: Path = config.video_path
 
-    def frames(self) -> Iterator[np.ndarray]:
+    def frames(self) -> Iterator[Array]:
         """Yield frames, honoring start_frame and max_frames."""
         capture: cv2.VideoCapture = cv2.VideoCapture(str(self._path))
         if not capture.isOpened():
@@ -110,7 +111,7 @@ class VideoSource(FrameSource):
         finally:
             capture.release()
 
-    def _read_all(self, capture: cv2.VideoCapture) -> Iterator[np.ndarray]:
+    def _read_all(self, capture: cv2.VideoCapture) -> Iterator[Array]:
         capture.set(cv2.CAP_PROP_POS_FRAMES, float(self._config.start_frame))
         emitted: int = 0
         while True:
@@ -140,7 +141,7 @@ class ImageDirSource(FrameSource):
     def _collect(directory: Path) -> list[Path]:
         return sorted(p for p in directory.iterdir() if p.suffix.lower() in IMAGE_SUFFIXES)
 
-    def frames(self) -> Iterator[np.ndarray]:
+    def frames(self) -> Iterator[Array]:
         """Yield decoded images, honoring start_frame and max_frames."""
         end: int | None = (
             None
@@ -148,7 +149,7 @@ class ImageDirSource(FrameSource):
             else self._config.start_frame + self._config.max_frames
         )
         for path in self._paths[self._config.start_frame : end]:
-            frame: np.ndarray | None = cv2.imread(str(path))
+            frame: Array | None = cv2.imread(str(path))
             if frame is None:
                 raise FrameSourceError(f"cannot decode image: {path}")
             yield frame

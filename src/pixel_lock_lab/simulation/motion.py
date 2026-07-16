@@ -18,6 +18,7 @@ import numpy as np
 from pixel_lock_lab.pipeline.stabilize import ImuSample, translate
 
 if TYPE_CHECKING:
+    from pixel_lock_lab.array_types import Array
     from pixel_lock_lab.config.schemas import MotionConfig
 
 
@@ -50,7 +51,7 @@ class MotionGenerator:
         self._config: MotionConfig = config
         self._dt: float = 1.0 / fps
         rng: np.random.Generator = np.random.default_rng(config.seed)
-        drawn: np.ndarray = rng.uniform(0.0, 2.0 * math.pi, size=4)
+        drawn: Array = rng.uniform(0.0, 2.0 * math.pi, size=4)
         self._phases: tuple[float, float, float, float] = (
             float(drawn[0]),
             float(drawn[1]),
@@ -87,7 +88,7 @@ class MotionGenerator:
             raise ValueError(f"frame_count must be non-negative, got {frame_count}")
         return [self.sample(i) for i in range(frame_count)]
 
-    def shake(self, frame: np.ndarray, frame_index: int, focal_length_px: float) -> np.ndarray:
+    def shake(self, frame: Array, frame_index: int, focal_length_px: float) -> Array:
         """Warp a frame by the motion at `frame_index`, simulating camera shake."""
         if not self._config.enabled:
             return frame
