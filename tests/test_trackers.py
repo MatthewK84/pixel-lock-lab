@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from pixel_lock_lab.array_types import Array
 from pixel_lock_lab.config.schemas import SourceConfig, TrackerBackend, TrackerConfig, TrackStatus
 from pixel_lock_lab.errors import TrackerError
 from pixel_lock_lab.geometry import BoundingBox, center_distance
@@ -22,10 +23,10 @@ class ScriptedTracker(BaseTracker):
         self._script: list[Measurement] = script
         self._step: int = 0
 
-    def _initialize(self, frame: np.ndarray, bbox: BoundingBox) -> None:
+    def _initialize(self, frame: Array, bbox: BoundingBox) -> None:
         self._step = 0
 
-    def _measure(self, frame: np.ndarray, search_box: BoundingBox) -> Measurement:
+    def _measure(self, frame: Array, search_box: BoundingBox) -> Measurement:
         if self._step >= len(self._script):
             return Measurement(None, 0.0)
         result = self._script[self._step]
@@ -39,47 +40,47 @@ class StubDetector:
     def __init__(self, detections: list[Detection]) -> None:
         self._detections = detections
 
-    def detect(self, frame: np.ndarray) -> list[Detection]:
+    def detect(self, frame: Array) -> list[Detection]:
         return self._detections
 
 
 @pytest.fixture
-def blank_frame() -> np.ndarray:
+def blank_frame() -> Array:
     return np.zeros((240, 320, 3), dtype=np.uint8)
 
 
 @pytest.fixture
-def synthetic_frames() -> list[np.ndarray]:
+def synthetic_frames() -> list[Array]:
     source = SyntheticSource(SourceConfig(synthetic_frames=40, frame_width=320, frame_height=240))
     return list(source.frames())
 
 
-def test_update_before_init_raises(blank_frame: np.ndarray) -> None:
+def test_update_before_init_raises(blank_frame: Array) -> None:
     tracker = TemplateMatchTracker(TrackerConfig())
     with pytest.raises(TrackerError, match="init"):
         tracker.update(blank_frame)
 
 
-def test_init_rejects_offscreen_bbox(blank_frame: np.ndarray) -> None:
+def test_init_rejects_offscreen_bbox(blank_frame: Array) -> None:
     tracker = TemplateMatchTracker(TrackerConfig())
     with pytest.raises(TrackerError, match="outside the frame"):
         tracker.init(blank_frame, BoundingBox(900.0, 900.0, 20.0, 20.0))
 
 
-def test_init_rejects_tiny_bbox(blank_frame: np.ndarray) -> None:
+def test_init_rejects_tiny_bbox(blank_frame: Array) -> None:
     tracker = TemplateMatchTracker(TrackerConfig())
     with pytest.raises(TrackerError, match="too small"):
         tracker.init(blank_frame, BoundingBox(10.0, 10.0, 3.0, 3.0))
 
 
-def test_init_sets_locked(blank_frame: np.ndarray) -> None:
+def test_init_sets_locked(blank_frame: Array) -> None:
     tracker = TemplateMatchTracker(TrackerConfig())
     state = tracker.init(blank_frame, BoundingBox(100.0, 100.0, 30.0, 30.0))
     assert state.status is TrackStatus.LOCKED
     assert state.score == 1.0
 
 
-def test_template_tracker_follows_synthetic_target(synthetic_frames: list[np.ndarray]) -> None:
+def test_template_tracker_follows_synthetic_target(synthetic_frames: list[Array]) -> None:
     source = SyntheticSource(SourceConfig(synthetic_frames=40, frame_width=320, frame_height=240))
     tracker = TemplateMatchTracker(TrackerConfig(lock_threshold=0.4, reacquire_threshold=0.5))
     truth = source.ground_truth(0)
@@ -93,7 +94,7 @@ def test_template_tracker_follows_synthetic_target(synthetic_frames: list[np.nda
     assert center_distance(state.bbox, expected) < 8.0
 
 
-def test_low_score_triggers_coasting(blank_frame: np.ndarray) -> None:
+def test_low_score_triggers_coasting(blank_frame: Array) -> None:
     config = TrackerConfig(lock_threshold=0.5, reacquire_threshold=0.8, max_coast_frames=3)
     script = [Measurement(None, 0.0)] * 2
     tracker = ScriptedTracker(config, script)
@@ -103,7 +104,7 @@ def test_low_score_triggers_coasting(blank_frame: np.ndarray) -> None:
     assert state.coast_frames == 1
 
 
-def test_coast_budget_exhaustion_declares_lost(blank_frame: np.ndarray) -> None:
+def test_coast_budget_exhaustion_declares_lost(blank_frame: Array) -> None:
     config = TrackerConfig(max_coast_frames=2)
     tracker = ScriptedTracker(config, [Measurement(None, 0.0)] * 5)
     tracker.init(blank_frame, BoundingBox(100.0, 100.0, 20.0, 20.0))
@@ -111,7 +112,7 @@ def test_coast_budget_exhaustion_declares_lost(blank_frame: np.ndarray) -> None:
     assert statuses == [TrackStatus.COASTING, TrackStatus.COASTING, TrackStatus.LOST]
 
 
-def test_hysteresis_blocks_weak_reacquire(blank_frame: np.ndarray) -> None:
+def test_hysteresis_blocks_weak_reacquire(blank_frame: Array) -> None:
     config = TrackerConfig(lock_threshold=0.4, reacquire_threshold=0.9, max_coast_frames=10)
     box = BoundingBox(100.0, 100.0, 20.0, 20.0)
     script = [Measurement(None, 0.0), Measurement(box, 0.6), Measurement(box, 0.95)]
@@ -123,7 +124,7 @@ def test_hysteresis_blocks_weak_reacquire(blank_frame: np.ndarray) -> None:
     assert tracker.update(blank_frame).status is TrackStatus.LOCKED
 
 
-def test_reset_clears_state(blank_frame: np.ndarray) -> None:
+def test_reset_clears_state(blank_frame: Array) -> None:
     tracker = TemplateMatchTracker(TrackerConfig())
     tracker.init(blank_frame, BoundingBox(100.0, 100.0, 20.0, 20.0))
     tracker.reset()
@@ -154,7 +155,7 @@ def test_associate_returns_none_below_threshold() -> None:
     assert associate([far], reference, min_iou=0.3) is None
 
 
-def test_detection_tracker_tracks_matching_detection(blank_frame: np.ndarray) -> None:
+def test_detection_tracker_tracks_matching_detection(blank_frame: Array) -> None:
     box = BoundingBox(100.0, 100.0, 20.0, 20.0)
     detector = StubDetector([Detection(box, 0.95)])
     tracker = DetectionTracker(TrackerConfig(backend=TrackerBackend.DETECTION), detector)

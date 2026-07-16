@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from pixel_lock_lab.array_types import Array
 from pixel_lock_lab.config.schemas import ClutterConfig, MotionConfig
 from pixel_lock_lab.geometry import BoundingBox
 from pixel_lock_lab.simulation.clutter import ClutterInjector, add_noise, occlude
@@ -12,48 +13,48 @@ from pixel_lock_lab.simulation.motion import MotionGenerator
 
 
 @pytest.fixture
-def frame() -> np.ndarray:
+def frame() -> Array:
     return np.full((120, 160, 3), 128, dtype=np.uint8)
 
 
-def test_disabled_injector_is_passthrough(frame: np.ndarray) -> None:
+def test_disabled_injector_is_passthrough(frame: Array) -> None:
     injector = ClutterInjector(ClutterConfig(enabled=False, blob_count=50))
     assert injector.apply(frame, 0) is frame
 
 
-def test_injection_is_deterministic(frame: np.ndarray) -> None:
+def test_injection_is_deterministic(frame: Array) -> None:
     config = ClutterConfig(enabled=True, seed=99, blob_count=10, noise_sigma=5.0)
     first = ClutterInjector(config).apply(frame, 3)
     second = ClutterInjector(config).apply(frame, 3)
     assert np.array_equal(first, second)
 
 
-def test_different_frames_differ(frame: np.ndarray) -> None:
+def test_different_frames_differ(frame: Array) -> None:
     config = ClutterConfig(enabled=True, seed=99, blob_count=10)
     assert not np.array_equal(
         ClutterInjector(config).apply(frame, 1), ClutterInjector(config).apply(frame, 2)
     )
 
 
-def test_injection_does_not_mutate_input(frame: np.ndarray) -> None:
+def test_injection_does_not_mutate_input(frame: Array) -> None:
     original = frame.copy()
     config = ClutterConfig(enabled=True, blob_count=5, noise_sigma=3.0, glare_intensity=0.5)
     ClutterInjector(config).apply(frame, 0)
     assert np.array_equal(frame, original)
 
 
-def test_noise_changes_pixels_but_stays_in_range(frame: np.ndarray) -> None:
+def test_noise_changes_pixels_but_stays_in_range(frame: Array) -> None:
     noisy = add_noise(frame, 10.0, np.random.default_rng(0))
     assert not np.array_equal(noisy, frame)
     assert noisy.min() >= 0
     assert noisy.max() <= 255
 
 
-def test_noise_zero_sigma_is_passthrough(frame: np.ndarray) -> None:
+def test_noise_zero_sigma_is_passthrough(frame: Array) -> None:
     assert add_noise(frame, 0.0, np.random.default_rng(0)) is frame
 
 
-def test_occlude_darkens_target(frame: np.ndarray) -> None:
+def test_occlude_darkens_target(frame: Array) -> None:
     box = BoundingBox(40.0, 40.0, 20.0, 20.0)
     occluded = occlude(frame, box, coverage=1.0)
     assert occluded[45, 45].mean() < frame[45, 45].mean()
@@ -130,7 +131,7 @@ def test_generator_rejects_bad_fps() -> None:
         MotionGenerator(MotionConfig(), fps=0.0)
 
 
-def test_shake_moves_frame(frame: np.ndarray) -> None:
+def test_shake_moves_frame(frame: Array) -> None:
     marked = frame.copy()
     marked[60, 80] = 255
     config = MotionConfig(enabled=True, tremor_amplitude_dps=20.0, drift_dps=10.0)

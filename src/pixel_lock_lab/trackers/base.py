@@ -16,7 +16,7 @@ from pixel_lock_lab.errors import TrackerError
 from pixel_lock_lab.geometry import BoundingBox, clip_to_frame
 
 if TYPE_CHECKING:
-    import numpy as np
+    from pixel_lock_lab.array_types import Array
 
 MIN_TEMPLATE_PX: Final[int] = 4
 
@@ -44,7 +44,7 @@ class TrackState:
     latency_ms: float
 
 
-def _validate_frame(frame: np.ndarray) -> None:
+def _validate_frame(frame: Array) -> None:
     if frame.ndim not in (2, 3):
         raise TrackerError(f"frame must be 2D or 3D, got shape {frame.shape}")
     if frame.size == 0:
@@ -79,14 +79,14 @@ class BaseTracker(ABC):
         return self._score
 
     @abstractmethod
-    def _initialize(self, frame: np.ndarray, bbox: BoundingBox) -> None:
+    def _initialize(self, frame: Array, bbox: BoundingBox) -> None:
         """Backend-specific setup for a new target."""
 
     @abstractmethod
-    def _measure(self, frame: np.ndarray, search_box: BoundingBox) -> Measurement:
+    def _measure(self, frame: Array, search_box: BoundingBox) -> Measurement:
         """Backend-specific single-frame measurement within `search_box`."""
 
-    def init(self, frame: np.ndarray, bbox: BoundingBox) -> TrackState:
+    def init(self, frame: Array, bbox: BoundingBox) -> TrackState:
         """Start tracking `bbox` in `frame`. Resets all internal state."""
         _validate_frame(frame)
         clipped: BoundingBox | None = clip_to_frame(bbox, frame.shape[1], frame.shape[0])
@@ -113,7 +113,7 @@ class BaseTracker(ABC):
         self._frame_index = -1
         self._anchor = None
 
-    def update(self, frame: np.ndarray, latency_ms: float = 0.0) -> TrackState:
+    def update(self, frame: Array, latency_ms: float = 0.0) -> TrackState:
         """Advance the track by one frame and apply the lock policy."""
         _validate_frame(frame)
         if self._status is TrackStatus.UNINITIALIZED:
@@ -124,7 +124,7 @@ class BaseTracker(ABC):
         self._apply_policy(frame, measurement, predicted)
         return self._build_state(latency_ms, predicted)
 
-    def _measure_safely(self, frame: np.ndarray, predicted: BoundingBox | None) -> Measurement:
+    def _measure_safely(self, frame: Array, predicted: BoundingBox | None) -> Measurement:
         if predicted is None:
             return Measurement(None, 0.0)
         search: BoundingBox | None = clip_to_frame(
@@ -148,7 +148,7 @@ class BaseTracker(ABC):
         )
         return min(grown, self._config.max_lost_search_scale)
 
-    def _predict(self, frame: np.ndarray) -> BoundingBox | None:
+    def _predict(self, frame: Array) -> BoundingBox | None:
         """Where to look next: velocity-projected when tracking, the anchor when lost."""
         if self._bbox is None:
             return self._anchor_region(frame)
@@ -156,14 +156,14 @@ class BaseTracker(ABC):
         moved: BoundingBox = self._bbox.translated(vx, vy)
         return clip_to_frame(moved, frame.shape[1], frame.shape[0])
 
-    def _anchor_region(self, frame: np.ndarray) -> BoundingBox | None:
+    def _anchor_region(self, frame: Array) -> BoundingBox | None:
         """Last known position, kept so a LOST track can still be re-acquired."""
         if self._anchor is None:
             return None
         return clip_to_frame(self._anchor, frame.shape[1], frame.shape[0])
 
     def _apply_policy(
-        self, frame: np.ndarray, measurement: Measurement, predicted: BoundingBox | None
+        self, frame: Array, measurement: Measurement, predicted: BoundingBox | None
     ) -> None:
         """Route the measurement through lock, coast, or lost handling."""
         self._score = measurement.score
@@ -201,7 +201,7 @@ class BaseTracker(ABC):
             alpha * vy + (1.0 - alpha) * (new_cy - old_cy),
         )
 
-    def _coast(self, frame: np.ndarray, predicted: BoundingBox | None) -> None:
+    def _coast(self, frame: Array, predicted: BoundingBox | None) -> None:
         """Dead-reckon through a dropout until the coast budget expires."""
         self._coast_frames += 1
         if self._coast_frames > self._config.max_coast_frames or predicted is None:

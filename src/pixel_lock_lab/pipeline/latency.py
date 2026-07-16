@@ -16,6 +16,8 @@ import numpy as np
 if TYPE_CHECKING:
     from types import TracebackType
 
+    from pixel_lock_lab.array_types import Array
+
 MS_PER_SECOND: Final[float] = 1000.0
 
 
@@ -57,7 +59,7 @@ class LatencyRecorder:
         samples: list[float] = self._samples.get(stage, [])
         if not samples:
             return StageStats(stage, 0, 0.0, 0.0, 0.0, 0.0, 0.0)
-        array: np.ndarray = np.asarray(samples, dtype=np.float64)
+        array: Array = np.asarray(samples, dtype=np.float64)
         return StageStats(
             stage=stage,
             count=int(array.size),

@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from pixel_lock_lab.array_types import Array
 from pixel_lock_lab.cli import main
 from pixel_lock_lab.config.schemas import (
     ClutterConfig,
@@ -79,7 +80,7 @@ def test_session_writes_log(tmp_path: Path) -> None:
 class _BlindSource:
     """Source with no ground truth, used to test the config guard."""
 
-    def frames(self) -> Iterator[np.ndarray]:
+    def frames(self) -> Iterator[Array]:
         yield np.zeros((240, 320, 3), dtype=np.uint8)
 
     def ground_truth(self, frame_index: int) -> None:

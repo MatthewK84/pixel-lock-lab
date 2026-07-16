@@ -6,17 +6,20 @@ composes them in a fixed order: ROI -> exposure -> contrast -> denoise -> sharpe
 
 from __future__ import annotations
 
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
 import cv2
 import numpy as np
 
 from pixel_lock_lab.config.schemas import DenoiseMethod, PreprocessConfig, RegionOfInterest
 
+if TYPE_CHECKING:
+    from pixel_lock_lab.array_types import Array
+
 BILATERAL_SIGMA: Final[float] = 50.0
 
 
-def apply_roi(frame: np.ndarray, roi: RegionOfInterest | None) -> np.ndarray:
+def apply_roi(frame: Array, roi: RegionOfInterest | None) -> Array:
     """Crop to the configured ROI, clipped to frame bounds."""
     if roi is None:
         return frame
@@ -28,31 +31,31 @@ def apply_roi(frame: np.ndarray, roi: RegionOfInterest | None) -> np.ndarray:
     return np.asarray(frame[roi.y : y2, roi.x : x2].copy())
 
 
-def apply_exposure(frame: np.ndarray, gain: float) -> np.ndarray:
+def apply_exposure(frame: Array, gain: float) -> Array:
     """Simulate sensor exposure gain with saturation."""
     if gain == 1.0:
         return frame
     return cv2.convertScaleAbs(frame, alpha=gain, beta=0.0)
 
 
-def apply_contrast(frame: np.ndarray, alpha: float, beta: float) -> np.ndarray:
+def apply_contrast(frame: Array, alpha: float, beta: float) -> Array:
     """Linear contrast and brightness adjustment."""
     if alpha == 1.0 and beta == 0.0:
         return frame
     return cv2.convertScaleAbs(frame, alpha=alpha, beta=beta)
 
 
-def apply_clahe(frame: np.ndarray, clip_limit: float, grid: int) -> np.ndarray:
+def apply_clahe(frame: Array, clip_limit: float, grid: int) -> Array:
     """Contrast-limited adaptive histogram equalization on luminance only."""
     clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=(grid, grid))
     if frame.ndim == 2:
         return clahe.apply(frame)
-    lab: np.ndarray = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
+    lab: Array = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
     lab[:, :, 0] = clahe.apply(lab[:, :, 0])
     return cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
 
 
-def apply_denoise(frame: np.ndarray, method: DenoiseMethod, strength: int) -> np.ndarray:
+def apply_denoise(frame: Array, method: DenoiseMethod, strength: int) -> Array:
     """Apply the selected denoise kernel."""
     if method is DenoiseMethod.NONE:
         return frame
@@ -63,11 +66,11 @@ def apply_denoise(frame: np.ndarray, method: DenoiseMethod, strength: int) -> np
     return cv2.bilateralFilter(frame, strength, BILATERAL_SIGMA, BILATERAL_SIGMA)
 
 
-def apply_sharpen(frame: np.ndarray, amount: float) -> np.ndarray:
+def apply_sharpen(frame: Array, amount: float) -> Array:
     """Unsharp mask edge enhancement."""
     if amount <= 0.0:
         return frame
-    blurred: np.ndarray = cv2.GaussianBlur(frame, (0, 0), sigmaX=2.0)
+    blurred: Array = cv2.GaussianBlur(frame, (0, 0), sigmaX=2.0)
     return cv2.addWeighted(frame, 1.0 + amount, blurred, -amount, 0.0)
 
 
@@ -82,11 +85,11 @@ class Preprocessor:
         """The preprocessing configuration in use."""
         return self._config
 
-    def apply(self, frame: np.ndarray) -> np.ndarray:
+    def apply(self, frame: Array) -> Array:
         """Run the full stage chain, returning a new array."""
         if not self._config.enabled:
             return frame
-        stage: np.ndarray = apply_roi(frame, self._config.roi)
+        stage: Array = apply_roi(frame, self._config.roi)
         stage = apply_exposure(stage, self._config.exposure_gain)
         stage = apply_contrast(stage, self._config.contrast_alpha, self._config.brightness_beta)
         if self._config.clahe_enabled:

@@ -19,6 +19,8 @@ import numpy as np
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from pixel_lock_lab.array_types import Array
+
 from pixel_lock_lab.config.schemas import LabConfig, StabilizeMode, TrackStatus
 from pixel_lock_lab.diagnostics.drop_analyzer import DropEvent, find_drop_events
 from pixel_lock_lab.diagnostics.log_schema import TrackLogRecord, TrackLogWriter, record_from_state
@@ -56,11 +58,11 @@ class SessionResult:
         return locked / len(self.records)
 
 
-def _mean_intensity(frame: np.ndarray, box: BoundingBox | None) -> float:
+def _mean_intensity(frame: Array, box: BoundingBox | None) -> float:
     """Mean intensity inside the track box, used for low-contrast attribution."""
     if box is None:
         return 0.0
-    patch: np.ndarray | None = crop(frame, box)
+    patch: Array | None = crop(frame, box)
     if patch is None or patch.size == 0:
         return 0.0
     return float(np.clip(patch.mean(), 0.0, 255.0))
@@ -91,19 +93,19 @@ class Session:
             raise ConfigError("initial_bbox is required for sources without ground truth")
         return truth
 
-    def _corrupt(self, frame: np.ndarray, index: int) -> np.ndarray:
+    def _corrupt(self, frame: Array, index: int) -> Array:
         """Apply the simulated motion and clutter for one frame."""
         with self._latency.measure("simulate"):
-            shaken: np.ndarray = self._motion.shake(
+            shaken: Array = self._motion.shake(
                 frame, index, self._config.stabilize.focal_length_px
             )
             truth: BoundingBox | None = self._source.ground_truth(index)
             return self._clutter.apply(shaken, index, truth)
 
-    def _condition(self, frame: np.ndarray, index: int) -> tuple[np.ndarray, float]:
+    def _condition(self, frame: Array, index: int) -> tuple[Array, float]:
         """Preprocess and stabilize, returning the frame and residual motion."""
         with self._latency.measure("preprocess"):
-            processed: np.ndarray = self._preprocessor.apply(frame)
+            processed: Array = self._preprocessor.apply(frame)
         with self._latency.measure("stabilize"):
             imu: ImuSample | None = self._imu_for(index)
             result: StabilizationResult = self._stabilizer.apply(processed, imu, self._motion.dt)
@@ -119,7 +121,7 @@ class Session:
         dx, dy = self._preprocessor.roi_offset()
         return box.translated(-float(dx), -float(dy))
 
-    def _track(self, frame: np.ndarray, index: int) -> TrackState:
+    def _track(self, frame: Array, index: int) -> TrackState:
         """Initialize on the first frame, otherwise update."""
         with self._latency.measure("track") as timer:
             if index == 0:
@@ -144,9 +146,7 @@ class Session:
             latency_ms=latency_ms,
         )
 
-    def _log(
-        self, state: TrackState, frame: np.ndarray, index: int, residual: float
-    ) -> TrackLogRecord:
+    def _log(self, state: TrackState, frame: Array, index: int, residual: float) -> TrackLogRecord:
         return record_from_state(
             state,
             timestamp=index * self._motion.dt,
@@ -181,7 +181,7 @@ class Session:
     ) -> list[TrackLogRecord]:
         records: list[TrackLogRecord] = []
         for index, raw in enumerate(self._source.frames()):
-            corrupted: np.ndarray = self._corrupt(raw, index)
+            corrupted: Array = self._corrupt(raw, index)
             conditioned, residual = self._condition(corrupted, index)
             state: TrackState = self._track(conditioned, index)
             record: TrackLogRecord = self._log(state, conditioned, index, residual)

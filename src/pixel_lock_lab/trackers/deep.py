@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 import numpy as np
 
 if TYPE_CHECKING:
+    from pixel_lock_lab.array_types import Array
     from pixel_lock_lab.config.schemas import TrackerConfig
 from pixel_lock_lab.errors import BackendUnavailableError, TrackerError
 from pixel_lock_lab.geometry import BoundingBox, iou
@@ -36,7 +37,7 @@ class Detection:
 class Detector(Protocol):
     """Anything that turns a frame into detections."""
 
-    def detect(self, frame: np.ndarray) -> list[Detection]:
+    def detect(self, frame: Array) -> list[Detection]:
         """Return detections for a single frame."""
         ...
 
@@ -64,10 +65,10 @@ class DetectionTracker(BaseTracker):
             raise TrackerError("detector must implement detect(frame) -> list[Detection]")
         self._detector: Detector = detector
 
-    def _initialize(self, frame: np.ndarray, bbox: BoundingBox) -> None:
+    def _initialize(self, frame: Array, bbox: BoundingBox) -> None:
         """No warm-up needed; detection is stateless per frame."""
 
-    def _measure(self, frame: np.ndarray, search_box: BoundingBox) -> Measurement:
+    def _measure(self, frame: Array, search_box: BoundingBox) -> Measurement:
         try:
             detections: list[Detection] = self._detector.detect(frame)
         except (RuntimeError, ValueError) as exc:
@@ -100,7 +101,7 @@ class UltralyticsDetector:
             ) from exc
         return YOLO(weights)
 
-    def detect(self, frame: np.ndarray) -> list[Detection]:
+    def detect(self, frame: Array) -> list[Detection]:
         """Run the model and adapt its output to `Detection` objects."""
         results: Any = self._model.predict(frame, conf=self._confidence, verbose=False)
         detections: list[Detection] = []
