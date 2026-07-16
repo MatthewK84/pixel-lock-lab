@@ -1,0 +1,123 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pixel-lock-lab"
+version = "0.1.0"
+description = "A diagnostic and reference tracker toolkit for EO/IR pixel-lock analysis"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+keywords = ["tracking", "computer-vision", "diagnostics", "eo-ir", "c-uas"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+    "Typing :: Typed",
+]
+dependencies = [
+    "numpy>=1.24",
+    "opencv-contrib-python>=4.8",
+    "pydantic>=2.5",
+]
+
+[project.optional-dependencies]
+yaml = ["pyyaml>=6.0"]
+data = ["polars>=0.20"]
+deep = ["ultralytics>=8.1"]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=4.1",
+    "ruff>=0.5",
+    "mypy>=1.10",
+    "types-pyyaml>=6.0",
+]
+
+[project.scripts]
+pixel-lock-lab = "pixel_lock_lab.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/MatthewK84/pixel-lock-lab"
+Issues = "https://github.com/MatthewK84/pixel-lock-lab/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pixel_lock_lab"]
+
+# ---------------------------------------------------------------------------
+# Static analysis (Principle 5). Zero suppressions is the target.
+# ---------------------------------------------------------------------------
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+# P8: explicit data declarations
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+disallow_untyped_decorators = true
+# P9: error handling -- catch missing return types
+warn_return_any = true
+warn_unreachable = true
+# P3: unsafe features -- close dynamic typing backdoors
+disallow_any_generics = true
+disallow_subclassing_any = true
+files = ["src/pixel_lock_lab"]
+
+[[tool.mypy.overrides]]
+module = ["cv2.*", "ultralytics.*", "polars.*", "yaml.*"]
+ignore_missing_imports = true
+
+[tool.ruff]
+target-version = "py310"
+line-length = 99
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "N",      # pep8-naming
+    "UP",     # pyupgrade -- P3: avoid legacy patterns
+    "B",      # flake8-bugbear
+    "A",      # flake8-builtins -- P10: protect builtins
+    "C4",     # flake8-comprehensions -- P1: clean flow control
+    "SIM",    # flake8-simplify -- P1: simple control flow
+    "RET",    # flake8-return -- P1: early returns
+    "ARG",    # flake8-unused-arguments -- P4: strict scoping
+    "ERA",    # eradicate -- no commented-out code
+    "RUF",    # ruff-specific rules
+    "TCH",    # flake8-type-checking -- P8
+    "T20",    # flake8-print
+    "PTH",    # flake8-use-pathlib -- P3
+    "PERF",   # perflint
+    "LOG",    # flake8-logging -- P9
+]
+ignore = [
+    "E501",   # line length handled by the formatter
+]
+
+[tool.ruff.lint.flake8-type-checking]
+# Pydantic resolves annotations at runtime, so these imports must stay real.
+# This is a statement of fact about the runtime, not a suppression.
+runtime-evaluated-base-classes = [
+    "pydantic.BaseModel",
+    "pixel_lock_lab.config.schemas.StrictModel",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["ARG", "TC"]        # unused args and runtime imports are normal in fixtures
+"src/pixel_lock_lab/cli.py" = ["T20"]  # the CLI writes to stdout by design
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"

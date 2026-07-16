@@ -1,0 +1,40 @@
+# Byte-compiled / optimized
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+wheels/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Tooling caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Type stubs cache
+.dmypy.json
+dmypy.json
+
+# Editors
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Lab run artifacts
+runs/
+*.jsonl
+*.mp4
+*.parquet
